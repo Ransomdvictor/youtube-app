@@ -10,8 +10,10 @@ on:
 jobs:
   docker:
     runs-on: ubuntu-latest
+
     outputs:
       image_tag: ${{ steps.tag.outputs.image_tag }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,26 +30,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Capture the short Git SHA as the new image tag BEFORE building,
-      # so it can be used in the build-push tags list below.
       - name: Set image tag output
         id: tag
-        run: echo "image_tag=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          IMAGE_TAG="${GITHUB_SHA::8}"
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Image tag: $IMAGE_TAG"
 
       - name: Build and push
         id: build
         uses: docker/build-push-action@v6
         with:
+          context: .
           push: true
           tags: |
             devictor17/youtube-app:latest
             devictor17/youtube-app:${{ steps.tag.outputs.image_tag }}
-          outputs: type=image,push=true
 
   update-helm-chart:
     needs: docker
     runs-on: ubuntu-latest
+
+    # Only update Helm when code is pushed to main
     if: github.ref == 'refs/heads/main'
+
     steps:
       - name: Checkout Helm Charts repository
         uses: actions/checkout@v4
@@ -57,11 +64,11 @@ jobs:
           token: ${{ secrets.HELM_REPO_PAT }}
 
       - name: Install yq
+        shell: bash
         run: |
-          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O yq
-          chmod +x yq
-          sudo mv yq /usr/local/bin/
+          set -euo pipefail
 
+<<<<<<< HEAD
  - name: Update values.yaml with new image tag
   env:
     NEW_TAG: ${{ needs.docker.outputs.image_tag }}
@@ -82,12 +89,66 @@ jobs:
         -not -path "./.git/*" \
         -print
     )
+=======
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+            -O yq
+
+          chmod +x yq
+          sudo mv yq /usr/local/bin/yq
+
+          yq --version
+
+      - name: Update Helm values
+        env:
+          NEW_TAG: ${{ needs.docker.outputs.image_tag }}
+          CHART_VALUES_FILE: charts/youtube/values.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "New image tag: $NEW_TAG"
+          echo "Helm values file: $CHART_VALUES_FILE"
+
+          if [ ! -f "$CHART_VALUES_FILE" ]; then
+            echo "ERROR: Helm values file not found:"
+            echo "$CHART_VALUES_FILE"
+
+            echo ""
+            echo "Available values.yaml files:"
+            find . \
+              -type f \
+              -name "values.yaml" \
+              -not -path "./.git/*" \
+              -print
+
+            exit 1
+          fi
+
+          echo ""
+          echo "Current image configuration:"
+          yq '.image' "$CHART_VALUES_FILE"
+
+          echo ""
+          echo "Updating image tag..."
+
+          yq -i '.image.tag = strenv(NEW_TAG)' "$CHART_VALUES_FILE"
+
+          echo ""
+          echo "Updated image configuration:"
+          yq '.image' "$CHART_VALUES_FILE"
+
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add "$CHART_VALUES_FILE"
+>>>>>>> 59b625768f239c319df7d895b9292cdef596bf32
 
     if [ "${#VALUES_FILES[@]}" -eq 0 ]; then
       echo "ERROR: Could not find values.yaml in the chart repository."
       exit 1
     fi
 
+<<<<<<< HEAD
     echo "Found values.yaml files:"
     printf '%s\n' "${VALUES_FILES[@]}"
 
@@ -126,3 +187,7 @@ jobs:
 
     git commit -m "Update image tag to $NEW_TAG"
     git push
+=======
+          git commit -m "Update image tag to $NEW_TAG"
+          git push
+>>>>>>> 59b625768f239c319df7d895b9292cdef596bf32
