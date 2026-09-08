@@ -62,57 +62,27 @@ jobs:
           chmod +x yq
           sudo mv yq /usr/local/bin/
 
-      - name: Update values.yaml with new image tag
+    - name: Update Helm values
   env:
     NEW_TAG: ${{ needs.docker.outputs.image_tag }}
+    CHART_VALUES_FILE: charts/youtube/values.yaml
   shell: bash
   run: |
     set -euo pipefail
 
-    echo "Repository contents:"
-    find . -maxdepth 4 -type f | sort
-
-    echo ""
-    echo "Searching for Helm values.yaml files..."
-
-    mapfile -t VALUES_FILES < <(
-      find . \
-        -type f \
-        -name "values.yaml" \
-        -not -path "./.git/*" \
-        -print
-    )
-
-    if [ "${#VALUES_FILES[@]}" -eq 0 ]; then
-      echo "ERROR: Could not find values.yaml in the chart repository."
-      exit 1
-    fi
-
-    echo "Found values.yaml files:"
-    printf '%s\n' "${VALUES_FILES[@]}"
-
-    if [ "${#VALUES_FILES[@]}" -gt 1 ]; then
+    if [ ! -f "$CHART_VALUES_FILE" ]; then
+      echo "ERROR: Helm values file not found:"
+      echo "$CHART_VALUES_FILE"
       echo ""
-      echo "ERROR: Multiple values.yaml files found."
-      echo "Please configure the exact Helm chart path."
+      echo "Available values.yaml files:"
+      find . -type f -name "values.yaml" -not -path "./.git/*" -print
       exit 1
     fi
 
-    CHART_VALUES_FILE="${VALUES_FILES[0]}"
-
-    echo ""
-    echo "Using Helm values file:"
-    echo "$CHART_VALUES_FILE"
-
-    echo ""
-    echo "Current image configuration:"
-    yq '.image' "$CHART_VALUES_FILE"
+    echo "Updating $CHART_VALUES_FILE"
+    echo "New image tag: $NEW_TAG"
 
     yq -i '.image.tag = strenv(NEW_TAG)' "$CHART_VALUES_FILE"
-
-    echo ""
-    echo "Updated image configuration:"
-    yq '.image' "$CHART_VALUES_FILE"
 
     git config user.name "github-actions"
     git config user.email "actions@github.com"
@@ -125,4 +95,5 @@ jobs:
     fi
 
     git commit -m "Update image tag to $NEW_TAG"
-    git push
+    git push 
+    
